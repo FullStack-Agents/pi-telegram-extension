@@ -16,24 +16,42 @@ const activeChats = new Map<number, {
 let currentTelegramChatId: number | null = null;
 
 export default function (pi: ExtensionAPI) {
-  let bot: TelegramBot | null = null;
+  
+  // Initialize bot immediately for TypeScript to recognize it
+  let bot: TelegramBot;
+  let pollingStarted = false;
 
-  // Initialize bot on session start
+  // Cleanup on shutdown
+  pi.on("session_shutdown", async () => {
+    if (bot) {
+      bot.stopPolling();
+      pollingStarted = false;
+      bot = null as any;
+    }
+  });
+
+  // Initialize bot and set up handlers
   pi.on("session_start", async (_event, ctx) => {
     try {
-      // Create bot without polling initially to avoid conflicts
+      // Create bot without polling initially
       bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
       
       // Get bot info to verify connection
       const botInfo = await bot.getMe();
       ctx.ui.notify(`Telegram bot connected: @${botInfo.username}`, "info");
-      
+
       // Start polling for messages
       bot.startPolling();
+      pollingStarted = true;
       
       // Handle incoming messages
       bot.on("message", async (msg) => {
         if (!msg.text) return;
+        
+        // Skip command messages - they're handled by onText handlers
+        if (msg.text.startsWith("/")) {
+          return;
+        }
         
         const chatId = msg.chat.id;
         const username = msg.from?.username;
@@ -66,13 +84,36 @@ export default function (pi: ExtensionAPI) {
         console.error("Telegram polling error:", error);
       });
       
+      // Handle /new command - create new Pi session
+      bot.onText(/\/new/, async (msg) => {
+        const chatId = msg.chat.id;
+        
+        // Send confirmation to Telegram user
+        await bot.sendMessage(chatId, "🔄 Creating new Pi session...");
+        
+        // Trigger Pi's /new command
+        pi.sendUserMessage("/new");
+      });
+      
+      // Handle /stop command - abort current execution
+      bot.onText(/\/stop/, async (msg) => {
+        const chatId = msg.chat.id;
+        
+        // Send confirmation to Telegram user
+        await bot.sendMessage(chatId, "🛑 Stopping current execution...");
+        
+        // Trigger Pi's /telegram_stop command
+        pi.sendUserMessage("/telegram_stop");
+      });
+      
     } catch (error) {
-      ctx.ui.notify(`Failed to start Telegram bot: ${error}`, "warning");
-      console.error(error);
+      console.error("Failed to start Telegram bot:", error);
     }
 
     // Inject context about how to respond to Telegram messages
     pi.on("before_agent_start", async (event, ctx) => {
+      const anyCtx = ctx as any;
+      
       // Check if this is a Telegram message
       if (event.prompt.includes("[Telegram from")) {
         // Extract chatId from the prompt
@@ -81,7 +122,7 @@ export default function (pi: ExtensionAPI) {
           const chatId = parseInt(chatIdMatch[1], 10);
           
           // Store the current chatId for this turn (already set by message handler)
-          (ctx as any).currentTelegramChatId = chatId;
+          anyCtx.currentTelegramChatId = chatId;
           
           // Append instructions to system prompt
           return {
@@ -95,60 +136,52 @@ export default function (pi: ExtensionAPI) {
 
   // Auto-send Pi's text responses back to Telegram (only if not already handled by tool)
   pi.on("agent_end", async (event, ctx) => {
+    const anyCtx = ctx as any;
+    
     // Only auto-reply if we have a current Telegram chat ID in context
-    const telegramChatId = (ctx as any).currentTelegramChatId;
+    const telegramChatId = anyCtx.currentTelegramChatId;
     
-    if (!telegramChatId || !bot) {
-      return;
-    }
-    
-    // Get the last assistant message
-    const messages = event.messages;
-    const lastAssistantMsg = messages.filter(m => m.role === "assistant").pop();
-    
-    if (!lastAssistantMsg || !lastAssistantMsg.content) {
-      (ctx as any).currentTelegramChatId = null;
-      return;
-    }
-    
-    // Extract text content
-    let responseText = "";
-    for (const content of lastAssistantMsg.content) {
-      if (content.type === "text") {
-        responseText += content.text;
-      }
-    }
-    
-    // Skip if no text or if it's just a tool result message
-    if (!responseText.trim()) {
-      (ctx as any).currentTelegramChatId = null;
-      return;
-    }
-    
-    // Skip if the response already mentions sending or is just about sending (avoid double-send)
-    if (responseText.includes("Message sent to chat") || 
-        responseText.includes("telegram_send tool") ||
-        responseText.includes("I've answered")) {
+    if (!telegramChatId || !bot || !pollingStarted) {
       return;
     }
     
     try {
+      // Get the last assistant message
+      const messages = event.messages;
+      const lastAssistantMsg = messages.filter(m => m.role === "assistant").pop();
+      
+      if (!lastAssistantMsg || !lastAssistantMsg.content) {
+        anyCtx.currentTelegramChatId = null;
+        return;
+      }
+      
+      // Extract text content
+      let responseText = "";
+      for (const content of lastAssistantMsg.content) {
+        if (content.type === "text") {
+          responseText += content.text;
+        }
+      }
+      
+      // Skip if no text or if it's just a tool result message
+      if (!responseText.trim()) {
+        anyCtx.currentTelegramChatId = null;
+        return;
+      }
+      
+      // Skip if the response already mentions sending or is just about sending (avoid double-send)
+      if (responseText.includes("Message sent to chat") || 
+          responseText.includes("telegram_send tool") ||
+          responseText.includes("I've answered")) {
+        return;
+      }
+      
       // Send the response back to Telegram
       await bot.sendMessage(telegramChatId, responseText);
-      ctx.ui.notify(`Auto-replied to Telegram chat ${telegramChatId}`, "info");
     } catch (error) {
       console.error("Failed to auto-reply to Telegram:", error);
-    }
-    
-    // Clear current chat ID after replying
-    (ctx as any).currentTelegramChatId = null;
-  });
-
-  // Cleanup on shutdown
-  pi.on("session_shutdown", async () => {
-    if (bot) {
-      bot.stopPolling();
-      bot = null;
+    } finally {
+      anyCtx.currentTelegramChatId = null;
     }
   });
 
@@ -195,6 +228,15 @@ export default function (pi: ExtensionAPI) {
       }).join("\n");
       
       ctx.ui.notify(`Active Telegram chats:\n${chatList}`, "info");
+    },
+  });
+
+  // Register command to stop execution (for Telegram /stop)
+  pi.registerCommand("telegram_stop", {
+    description: "Stop current execution (triggered from Telegram)",
+    handler: async (_args, ctx) => {
+      ctx.abort();
+      ctx.ui.notify("Execution stopped via Telegram", "info");
     },
   });
 }
