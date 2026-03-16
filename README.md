@@ -34,6 +34,29 @@ cp -r . ~/.pi/agent/extensions/pi-telegram-extension
 4. Extension captures response via `agent_end` event
 5. Extension automatically sends response back to Telegram
 
+## Telegram Bot Commands
+
+The extension supports the following slash commands:
+
+| Command | Description |
+|---------|-------------|
+| `/new` | Create a new Pi session (clears context) |
+| `/stop` | Stop current Pi execution immediately |
+
+### /new Command
+Creates a fresh Pi session with an empty context window. Useful when you want to start a new conversation without restarting Pi.
+
+**Usage:** Send `/new` in Telegram
+
+**Response:** "🔄 Creating new Pi session..."
+
+### /stop Command
+Immediately aborts any ongoing Pi execution. Use this when Pi goes off the rails or gets stuck in a loop.
+
+**Usage:** Send `/stop` in Telegram
+
+**Response:** "🛑 Stopping current execution..."
+
 ## License
 
 MIT

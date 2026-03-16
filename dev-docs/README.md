@@ -124,6 +124,21 @@ const TELEGRAM_BOT_TOKEN = "8347300929:AAEfef-yMZSBXJIfeWeiGuZKX-JGamOs8cM";
 | Command | Purpose |
 |---------|---------|
 | `/telegram_chats` | List active Telegram conversations |
+| `/telegram_stop` | Stop current execution (triggered from Telegram /stop) |
+
+### Telegram Bot Commands
+
+The extension handles these Telegram slash commands directly:
+
+| Command | Description |
+|---------|-------------|
+| `/new` | Create a new Pi session (clears context window) |
+| `/stop` | Immediately stop current Pi execution |
+
+**How they work:**
+- `/new` - Sends confirmation message, then triggers Pi's built-in `/new` command
+- `/stop` - Sends confirmation message, then triggers `/telegram_stop` Pi command which calls `ctx.abort()`
+- Commands are processed by the extension and NOT forwarded to Pi as regular text messages
 
 ## Message Format
 

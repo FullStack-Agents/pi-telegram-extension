@@ -107,11 +107,37 @@ Chronological log of the Pi Telegram extension development.
 
 Approximately 2 hours from start to working implementation.
 
+## Phase 9: Slash Commands (/new and /stop)
+
+### 2026-03-16: Command Implementation
+- **Time:** ~1:45 PM - 2:00 PM
+- **Features added:**
+  - `/new` command - Creates new Pi session
+  - `/stop` command - Aborts current execution
+  - Command filtering - Messages starting with `/` are not forwarded as regular text
+- **Implementation approach:**
+  - Used `bot.onText()` regex handlers for Telegram commands
+  - `/new` triggers Pi's built-in `/new` command via `sendUserMessage()`
+  - `/stop` triggers custom `/telegram_stop` Pi command that calls `ctx.abort()`
+  - Added `telegram_stop` command registration in Pi
+- **Key constraint discovered:** `ctx.newSession()` and `ctx.abort()` only available in command handlers, not event handlers
+- **Solution:** Use `sendUserMessage()` to trigger Pi commands
+- **Delegated to Pi:** Tasks 7.1, 7.2, 7.3 (implementation)
+- **Result:** ✅ Both commands working!
+
+### Command Testing
+- `/new` - Successfully creates new session with confirmation message
+- `/stop` - Successfully aborts execution with confirmation message
+
+## Total Development Time
+
+Approximately 2.5 hours from start to working implementation with slash commands.
+
 ## Next Steps (If Continuing)
 
 1. Add persistent storage for chat history
 2. Support media messages (images, documents)
 3. Add rate limiting
 4. Move bot token to environment variables
-5. Add command handling (/start, /help)
+5. Add more commands (/start, /help, /status)
 6. Support group chats

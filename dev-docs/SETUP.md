@@ -142,6 +142,19 @@ Telegram bot connected: @trout_pi_bot
 3. Wait for response
 4. Response should arrive within seconds
 
+### Testing Commands
+
+**Test /new:**
+```
+/new
+```
+Expected: "🔄 Creating new Pi session..."
+
+**Test /stop:**
+1. Ask Pi to do something long-running
+2. Send `/stop`
+Expected: "🛑 Stopping current execution..."
+
 ## Updating the Extension
 
 When making changes:
