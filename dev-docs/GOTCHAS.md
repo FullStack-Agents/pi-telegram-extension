@@ -76,7 +76,7 @@ cp dist/index.js ~/.pi/agent/extensions/pi-telegram-extension/dist/
 **Check:**
 1. Is the bot token valid?
    ```bash
-   curl -s "https://api.telegram.org/bot8347300929:AAEfef-yMZSBXJIfeWeiGuZKX-JGamOs8cM/getMe"
+   curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
    ```
 
 2. Is another instance running?

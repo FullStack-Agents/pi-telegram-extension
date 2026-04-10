@@ -96,12 +96,11 @@ Pi auto-discovers extensions from this directory.
 
 ## Configuration
 
-The Telegram bot token is hardcoded in the source:
-```typescript
-const TELEGRAM_BOT_TOKEN = "8347300929:AAEfef-yMZSBXJIfeWeiGuZKX-JGamOs8cM";
-```
+Configure via environment variables (see the project `README.md`):
 
-**Security Note:** In production, this should be loaded from environment variables or a secrets manager.
+- `TELEGRAM_BOT_TOKEN` (required)
+- `TELEGRAM_ALLOWLIST_ENABLED` — default `true`; set to `false` / `0` / `no` / `off` to allow any Telegram user (legacy behavior)
+- `TELEGRAM_ALLOWED_USER_IDS` — comma-separated numeric user IDs when the allowlist is enabled
 
 ## Extension API Usage
 
@@ -159,18 +158,16 @@ Or if no username:
 1. **No message history** - Extension doesn't persist chat history across Pi restarts
 2. **Single chat tracking** - Only tracks one `currentTelegramChatId` at a time
 3. **No media support** - Only handles text messages
-4. **Hardcoded token** - Bot token is in source code
-5. **No rate limiting** - Could hit Telegram API limits with high volume
+4. **No rate limiting** - Could hit Telegram API limits with high volume
 
 ### Potential Improvements
 
 1. **Persistent storage** - Store chat history in SQLite or JSON file
 2. **Multi-chat support** - Track multiple concurrent conversations
 3. **Media handling** - Support images, documents, voice messages
-4. **Environment config** - Load token from env vars
-5. **Rate limiting** - Add exponential backoff for API calls
-6. **Reply threading** - Support Telegram reply-to-message feature
-7. **Command parsing** - Handle Telegram bot commands (/start, /help, etc.)
+4. **Rate limiting** - Add exponential backoff for API calls
+5. **Reply threading** - Support Telegram reply-to-message feature
+6. **Command parsing** - Handle Telegram bot commands (/start, /help, etc.)
 
 ## Debugging
 

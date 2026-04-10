@@ -77,7 +77,7 @@ Create `/home/ben/pi-telegram-extension/tsconfig.json`:
 Create `/home/ben/pi-telegram-extension/src/index.ts` with the full implementation (see README.md for the complete code).
 
 **Key points:**
-- Hardcode your bot token
+- Set `TELEGRAM_BOT_TOKEN` (and optionally `TELEGRAM_ALLOWED_USER_IDS`, `TELEGRAM_ALLOWLIST_ENABLED`) in the environment before starting Pi
 - Use `agent_end` event for auto-reply
 - Store chat ID in module-level variable
 

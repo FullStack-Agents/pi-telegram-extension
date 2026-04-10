@@ -2,26 +2,76 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import TelegramBot from "node-telegram-bot-api";
 
-// Telegram Bot API token
-const TELEGRAM_BOT_TOKEN = "8347300929:AAEfef-yMZSBXJIfeWeiGuZKX-JGamOs8cM";
+function parseAllowlistEnabled(): boolean {
+  const v = process.env.TELEGRAM_ALLOWLIST_ENABLED;
+  if (v === undefined || v.trim() === "") return true;
+  const lower = v.trim().toLowerCase();
+  return !["0", "false", "no", "off"].includes(lower);
+}
+
+function parseAllowedUserIds(): Set<number> {
+  const raw = process.env.TELEGRAM_ALLOWED_USER_IDS ?? "";
+  const set = new Set<number>();
+  for (const part of raw.split(",")) {
+    const n = Number(part.trim());
+    if (Number.isInteger(n)) set.add(n);
+  }
+  return set;
+}
+
+function getBotToken(): string {
+  const t = process.env.TELEGRAM_BOT_TOKEN;
+  if (!t?.trim()) {
+    throw new Error(
+      "TELEGRAM_BOT_TOKEN is not set. Set it in the environment before starting Pi."
+    );
+  }
+  return t.trim();
+}
+
+const allowlistEnabled = parseAllowlistEnabled();
+const allowedUserIds = parseAllowedUserIds();
+
+/** Chat IDs we have accepted an inbound message from while allowlist is on (outbound allowlist). */
+const allowedOutboundChatIds = new Set<number>();
 
 // Store active chat IDs and their associated Pi sessions
-const activeChats = new Map<number, {
-  username?: string;
-  firstName?: string;
-  lastName?: string;
-}>();
+const activeChats = new Map<
+  number,
+  {
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+  }
+>();
 
 // Track the current Telegram chat for auto-reply
 let currentTelegramChatId: number | null = null;
 
+function isAllowedTelegramUser(msg: TelegramBot.Message): boolean {
+  if (!allowlistEnabled) return true;
+  const userId = msg.from?.id;
+  return typeof userId === "number" && allowedUserIds.has(userId);
+}
+
+function canSendToTelegramChat(chatId: number): boolean {
+  if (!allowlistEnabled) return true;
+  return allowedOutboundChatIds.has(chatId);
+}
+
+function recordAllowedInboundChat(msg: TelegramBot.Message): void {
+  const chatId = msg.chat.id;
+  if (!allowlistEnabled) return;
+  const userId = msg.from?.id;
+  if (typeof userId === "number" && allowedUserIds.has(userId)) {
+    allowedOutboundChatIds.add(chatId);
+  }
+}
+
 export default function (pi: ExtensionAPI) {
-  
-  // Initialize bot immediately for TypeScript to recognize it
   let bot: TelegramBot;
   let pollingStarted = false;
 
-  // Cleanup on shutdown
   pi.on("session_shutdown", async () => {
     if (bot) {
       bot.stopPolling();
@@ -30,103 +80,108 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // Initialize bot and set up handlers
   pi.on("session_start", async (_event, ctx) => {
     try {
-      // Create bot without polling initially
-      bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
-      
-      // Get bot info to verify connection
+      const token = getBotToken();
+      bot = new TelegramBot(token, { polling: false });
+
       const botInfo = await bot.getMe();
       ctx.ui.notify(`Telegram bot connected: @${botInfo.username}`, "info");
 
-      // Start polling for messages
+      if (allowlistEnabled) {
+        if (allowedUserIds.size === 0) {
+          ctx.ui.notify(
+            "Telegram allowlist is enabled but TELEGRAM_ALLOWED_USER_IDS is empty — no users can use the bot.",
+            "warning"
+          );
+        } else {
+          ctx.ui.notify(
+            `Telegram user allowlist enabled (${allowedUserIds.size} user(s)).`,
+            "info"
+          );
+        }
+      } else {
+        ctx.ui.notify(
+          "Telegram user allowlist is disabled — any user may message the bot.",
+          "warning"
+        );
+      }
+
       bot.startPolling();
       pollingStarted = true;
-      
-      // Handle incoming messages
+
       bot.on("message", async (msg) => {
         if (!msg.text) return;
-        
-        // Skip command messages - they're handled by onText handlers
-        if (msg.text.startsWith("/")) {
-          return;
-        }
-        
+        if (msg.text.startsWith("/")) return;
+
+        if (!isAllowedTelegramUser(msg)) return;
+
+        recordAllowedInboundChat(msg);
+
         const chatId = msg.chat.id;
         const username = msg.from?.username;
         const firstName = msg.from?.first_name;
         const lastName = msg.from?.last_name;
-        
-        // Store chat info
+
         if (!activeChats.has(chatId)) {
           activeChats.set(chatId, { username, firstName, lastName });
         }
-        
-        // Set current chat ID for auto-reply
+
         currentTelegramChatId = chatId;
-        
-        // Format the incoming message for Pi with clear instructions to use telegram_send
-        const userInfo = username ? `@${username}` : `${firstName || ""} ${lastName || ""}`.trim();
+
+        const userInfo = username
+          ? `@${username}`
+          : `${firstName || ""} ${lastName || ""}`.trim();
         const formattedMessage = `[Telegram from ${userInfo}]: ${msg.text}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
-        
-        // Send to Pi as a user message
+
         pi.sendUserMessage(formattedMessage);
       });
-      
-      // Handle errors
+
       bot.on("error", (error) => {
         console.error("Telegram bot error:", error);
       });
-      
-      // Handle polling errors
+
       bot.on("polling_error", (error) => {
         console.error("Telegram polling error:", error);
       });
-      
-      // Handle /new command - create new Pi session
+
       bot.onText(/\/new/, async (msg) => {
+        if (!isAllowedTelegramUser(msg)) return;
+
+        recordAllowedInboundChat(msg);
+
         const chatId = msg.chat.id;
-        
-        // Send confirmation to Telegram user
         await bot.sendMessage(chatId, "🔄 Creating new Pi session...");
-        
-        // Trigger Pi's /new command
         pi.sendUserMessage("/new");
       });
-      
-      // Handle /stop command - abort current execution
+
       bot.onText(/\/stop/, async (msg) => {
+        if (!isAllowedTelegramUser(msg)) return;
+
+        recordAllowedInboundChat(msg);
+
         const chatId = msg.chat.id;
-        
-        // Send confirmation to Telegram user
         await bot.sendMessage(chatId, "🛑 Stopping current execution...");
-        
-        // Trigger Pi's /telegram_stop command
         pi.sendUserMessage("/telegram_stop");
       });
-      
     } catch (error) {
       console.error("Failed to start Telegram bot:", error);
     }
 
-    // Inject context about how to respond to Telegram messages
     pi.on("before_agent_start", async (event, ctx) => {
       const anyCtx = ctx as any;
-      
-      // Check if this is a Telegram message
+
       if (event.prompt.includes("[Telegram from")) {
-        // Extract chatId from the prompt
         const chatIdMatch = event.prompt.match(/chatId=(\d+)/);
         if (chatIdMatch) {
           const chatId = parseInt(chatIdMatch[1], 10);
-          
-          // Store the current chatId for this turn (already set by message handler)
+
           anyCtx.currentTelegramChatId = chatId;
-          
-          // Append instructions to system prompt
+
           return {
-            systemPrompt: event.systemPrompt + "\n\nIMPORTANT: You received a message from Telegram. To respond, you MUST use the 'telegram_send' tool with the chatId provided in the message. Do not just reply with text - use the tool to send the message back to Telegram."
+            systemPrompt:
+              event.systemPrompt +
+              "\n\nIMPORTANT: You received a message from Telegram. To respond, you MUST use the 'telegram_send' tool with the chatId provided in the message. Do not just reply with text - use the tool to send the message back to Telegram.",
           };
         }
       }
@@ -134,49 +189,49 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
-  // Auto-send Pi's text responses back to Telegram (only if not already handled by tool)
   pi.on("agent_end", async (event, ctx) => {
     const anyCtx = ctx as any;
-    
-    // Only auto-reply if we have a current Telegram chat ID in context
+
     const telegramChatId = anyCtx.currentTelegramChatId;
-    
+
     if (!telegramChatId || !bot || !pollingStarted) {
       return;
     }
-    
+
+    if (!canSendToTelegramChat(telegramChatId)) {
+      anyCtx.currentTelegramChatId = null;
+      return;
+    }
+
     try {
-      // Get the last assistant message
       const messages = event.messages;
-      const lastAssistantMsg = messages.filter(m => m.role === "assistant").pop();
-      
+      const lastAssistantMsg = messages.filter((m) => m.role === "assistant").pop();
+
       if (!lastAssistantMsg || !lastAssistantMsg.content) {
         anyCtx.currentTelegramChatId = null;
         return;
       }
-      
-      // Extract text content
+
       let responseText = "";
       for (const content of lastAssistantMsg.content) {
         if (content.type === "text") {
           responseText += content.text;
         }
       }
-      
-      // Skip if no text or if it's just a tool result message
+
       if (!responseText.trim()) {
         anyCtx.currentTelegramChatId = null;
         return;
       }
-      
-      // Skip if the response already mentions sending or is just about sending (avoid double-send)
-      if (responseText.includes("Message sent to chat") || 
-          responseText.includes("telegram_send tool") ||
-          responseText.includes("I've answered")) {
+
+      if (
+        responseText.includes("Message sent to chat") ||
+        responseText.includes("telegram_send tool") ||
+        responseText.includes("I've answered")
+      ) {
         return;
       }
-      
-      // Send the response back to Telegram
+
       await bot.sendMessage(telegramChatId, responseText);
     } catch (error) {
       console.error("Failed to auto-reply to Telegram:", error);
@@ -185,7 +240,6 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // Register tool to send messages back to Telegram (manual fallback)
   pi.registerTool({
     name: "telegram_send",
     label: "Send Telegram Message",
@@ -194,13 +248,19 @@ export default function (pi: ExtensionAPI) {
       chatId: Type.Number({ description: "Telegram chat ID to send message to" }),
       message: Type.String({ description: "Message text to send" }),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       if (!bot) {
         throw new Error("Telegram bot not initialized");
       }
-      
+
       const { chatId, message } = params as { chatId: number; message: string };
-      
+
+      if (!canSendToTelegramChat(chatId)) {
+        throw new Error(
+          `Refused: chat ${chatId} is not allowed for outbound Telegram messages. With the user allowlist enabled, only chats that have already messaged this bot from an allowlisted user may be targeted.`
+        );
+      }
+
       try {
         await bot.sendMessage(chatId, message);
         return {
@@ -213,7 +273,6 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // Register command to list active chats
   pi.registerCommand("telegram_chats", {
     description: "List active Telegram chats",
     handler: async (_args, ctx) => {
@@ -221,17 +280,20 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("No active Telegram chats", "info");
         return;
       }
-      
-      const chatList = Array.from(activeChats.entries()).map(([chatId, info]) => {
-        const userInfo = info.username ? `@${info.username}` : `${info.firstName || ""} ${info.lastName || ""}`.trim();
-        return `${chatId}: ${userInfo}`;
-      }).join("\n");
-      
+
+      const chatList = Array.from(activeChats.entries())
+        .map(([chatId, info]) => {
+          const userInfo = info.username
+            ? `@${info.username}`
+            : `${info.firstName || ""} ${info.lastName || ""}`.trim();
+          return `${chatId}: ${userInfo}`;
+        })
+        .join("\n");
+
       ctx.ui.notify(`Active Telegram chats:\n${chatList}`, "info");
     },
   });
 
-  // Register command to stop execution (for Telegram /stop)
   pi.registerCommand("telegram_stop", {
     description: "Stop current execution (triggered from Telegram)",
     handler: async (_args, ctx) => {

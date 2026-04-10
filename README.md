@@ -18,6 +18,20 @@ cp -r . ~/.pi/agent/extensions/pi-telegram-extension
 # Restart Pi
 ```
 
+## Configuration (environment variables)
+
+Set these in the same environment that launches Pi (e.g. your shell profile, systemd unit, or wrapper script).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Yes | — | Bot token from [@BotFather](https://t.me/BotFather). |
+| `TELEGRAM_ALLOWLIST_ENABLED` | No | `true` (on) | Set to `false`, `0`, `no`, or `off` to disable the user allowlist and allow anyone to use the bot (legacy behavior). |
+| `TELEGRAM_ALLOWED_USER_IDS` | When allowlist on | — | Comma-separated numeric Telegram user IDs that may DM the bot and receive replies. Ignored when the allowlist is disabled. |
+
+With the allowlist **enabled** (default), only listed users can trigger `/new`, `/stop`, and normal messages. Outbound sends (`telegram_send` and auto-reply) are only allowed to `chat_id` values the bot has already seen from an allowlisted user (e.g. that user’s DM or a group after they used a command).
+
+With the allowlist **disabled**, behavior matches the previous open setup: any Telegram user can interact with the bot, and `telegram_send` may target any chat ID.
+
 ## Documentation
 
 - [Setup Guide](dev-docs/SETUP.md) - Step-by-step installation

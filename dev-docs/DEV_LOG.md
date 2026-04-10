@@ -83,7 +83,7 @@ Chronological log of the Pi Telegram extension development.
 
 1. **Auto-reply vs Tool-based:** Chose auto-reply because Qwen3.5:9B doesn't consistently use tools
 2. **Module-level state:** Used simple variable for chat ID tracking (acceptable for 1:1)
-3. **Hardcoded token:** Acceptable for prototype; should use env vars in production
+3. **Bot token:** Loaded from `TELEGRAM_BOT_TOKEN`; user allowlist via `TELEGRAM_ALLOWED_USER_IDS` / `TELEGRAM_ALLOWLIST_ENABLED`
 4. **RPC mode:** Pi runs in RPC mode for programmatic interaction
 
 ## Files Created
