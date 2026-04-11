@@ -132,10 +132,6 @@ export default function (pi: ExtensionAPI) {
       pollingStarted = true;
 
       bot.on("message", async (msg) => {
-        const text = msg.text || msg.caption;
-        if (!text && !msg.photo && !msg.document && !msg.video && !msg.animation && !msg.voice && !msg.audio) return;
-        if (text?.startsWith("/")) return;
-
         if (!isAllowedTelegramMessage(msg)) return;
 
         recordAllowedInboundChat(msg);
@@ -155,25 +151,33 @@ export default function (pi: ExtensionAPI) {
           ? `@${username}`
           : `${firstName || ""} ${lastName || ""}`.trim();
 
-        let messageContent = text || "";
+        let text = msg.text || msg.caption || "";
+        let attachmentInfo = "";
 
         if (msg.photo) {
-          const photo = msg.photo.pop();
+          const photo = msg.photo[msg.photo.length - 1];
+          if (!photo) return;
           const filePath = await bot.getFileLink(photo.file_id);
-          messageContent += `\n[Image: ${filePath}]`;
+          attachmentInfo = `\n[Image: ${filePath}]`;
         } else if (msg.document) {
-          messageContent += `\n[Document: ${msg.document.file_name || "unknown"}]`;
+          const doc = msg.document;
+          const filePath = await bot.getFileLink(doc.file_id);
+          attachmentInfo = `\n[Document: ${doc.file_name || "unknown"} (${filePath})]`;
         } else if (msg.video) {
-          messageContent += `\n[Video attached]`;
-        } else if (msg.animation) {
-          messageContent += `\n[Animation attached]`;
+          const filePath = await bot.getFileLink(msg.video.file_id);
+          attachmentInfo = `\n[Video: ${filePath}]`;
         } else if (msg.voice) {
-          messageContent += `\n[Voice message attached]`;
+          const filePath = await bot.getFileLink(msg.voice.file_id);
+          attachmentInfo = `\n[Voice: ${filePath}]`;
         } else if (msg.audio) {
-          messageContent += `\n[Audio file attached]`;
+          const filePath = await bot.getFileLink(msg.audio.file_id);
+          attachmentInfo = `\n[Audio: ${filePath}]`;
         }
 
-        const formattedMessage = `[Telegram from ${userInfo}]: ${messageContent}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
+        if (!text && !attachmentInfo) return;
+        if (text.startsWith("/")) return;
+
+        const formattedMessage = `[Telegram from ${userInfo}]: ${text}${attachmentInfo}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
 
         pi.sendUserMessage(formattedMessage);
       });
