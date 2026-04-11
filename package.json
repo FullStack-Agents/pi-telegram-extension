@@ -12,6 +12,8 @@
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.58.3",
     "@sinclair/typebox": "^0.34.0",
+    "@types/fs-extra": "^11.0.4",
+    "fs-extra": "^11.3.4",
     "node-telegram-bot-api": "^0.66.0"
   },
   "devDependencies": {
@@ -20,6 +22,8 @@
     "typescript": "^5.0.0"
   },
   "pi": {
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   }
 }

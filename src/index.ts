@@ -1,6 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import TelegramBot from "node-telegram-bot-api";
+import fs from "fs-extra";
+import path from "path";
+import os from "os";
 
 function parseAllowlistEnabled(): boolean {
   const v = process.env.TELEGRAM_ALLOWLIST_ENABLED;
@@ -154,24 +157,87 @@ export default function (pi: ExtensionAPI) {
         let text = msg.text || msg.caption || "";
         let attachmentInfo = "";
 
+        const tmpDir = path.join(os.homedir(), "tmp");
+        await fs.ensureDir(tmpDir);
+
         if (msg.photo) {
           const photo = msg.photo[msg.photo.length - 1];
           if (!photo) return;
           const filePath = await bot.getFileLink(photo.file_id);
-          attachmentInfo = `\n[Image: ${filePath}]`;
+          const fileName = `tg_photo_${photo.file_id}.jpg`;
+          const localPath = path.join(tmpDir, fileName);
+          
+          try {
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            await fs.writeFile(localPath, Buffer.from(arrayBuffer));
+            attachmentInfo = `\n[Image: ${localPath}]`;
+          } catch (e) {
+            console.error("Error downloading telegram photo:", e);
+            attachmentInfo = `\n[Image: ${filePath}] (local save failed)`;
+          }
         } else if (msg.document) {
           const doc = msg.document;
           const filePath = await bot.getFileLink(doc.file_id);
-          attachmentInfo = `\n[Document: ${doc.file_name || "unknown"} (${filePath})]`;
+          const fileName = doc.file_name || `tg_doc_${doc.file_id}`;
+          const localPath = path.join(tmpDir, fileName);
+
+          try {
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch document: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            await fs.writeFile(localPath, Buffer.from(arrayBuffer));
+            attachmentInfo = `\n[Document: ${fileName} (${localPath})]`;
+          } catch (e) {
+            console.error("Error downloading telegram document:", e);
+            attachmentInfo = `\n[Document: ${doc.file_name || "unknown"} (${filePath})]`;
+          }
         } else if (msg.video) {
           const filePath = await bot.getFileLink(msg.video.file_id);
-          attachmentInfo = `\n[Video: ${filePath}]`;
+          const fileName = `tg_video_${msg.video.file_id}.mp4`;
+          const localPath = path.join(tmpDir, fileName);
+
+          try {
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch video: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            await fs.writeFile(localPath, Buffer.from(arrayBuffer));
+            attachmentInfo = `\n[Video: ${localPath}]`;
+          } catch (e) {
+            console.error("Error downloading telegram video:", e);
+            attachmentInfo = `\n[Video: ${filePath}]`;
+          }
         } else if (msg.voice) {
           const filePath = await bot.getFileLink(msg.voice.file_id);
-          attachmentInfo = `\n[Voice: ${filePath}]`;
+          const fileName = `tg_voice_${msg.voice.file_id}.ogg`;
+          const localPath = path.join(tmpDir, fileName);
+
+          try {
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch voice: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            await fs.writeFile(localPath, Buffer.from(arrayBuffer));
+            attachmentInfo = `\n[Voice: ${localPath}]`;
+          } catch (e) {
+            console.error("Error downloading telegram voice:", e);
+            attachmentInfo = `\n[Voice: ${filePath}]`;
+          }
         } else if (msg.audio) {
           const filePath = await bot.getFileLink(msg.audio.file_id);
-          attachmentInfo = `\n[Audio: ${filePath}]`;
+          const fileName = (msg.audio as any).file_name || `tg_audio_${msg.audio.file_id}.mp3`;
+          const localPath = path.join(tmpDir, fileName);
+
+          try {
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch audio: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            await fs.writeFile(localPath, Buffer.from(arrayBuffer));
+            attachmentInfo = `\n[Audio: ${localPath}]`;
+          } catch (e) {
+            console.error("Error downloading telegram audio:", e);
+            attachmentInfo = `\n[Audio: ${filePath}]`;
+          }
         }
 
         if (!text && !attachmentInfo) return;
