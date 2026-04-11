@@ -132,8 +132,9 @@ export default function (pi: ExtensionAPI) {
       pollingStarted = true;
 
       bot.on("message", async (msg) => {
-        if (!msg.text) return;
-        if (msg.text.startsWith("/")) return;
+        const text = msg.text || msg.caption;
+        if (!text && !msg.photo && !msg.document && !msg.video && !msg.animation && !msg.voice && !msg.audio) return;
+        if (text?.startsWith("/")) return;
 
         if (!isAllowedTelegramMessage(msg)) return;
 
@@ -153,7 +154,26 @@ export default function (pi: ExtensionAPI) {
         const userInfo = username
           ? `@${username}`
           : `${firstName || ""} ${lastName || ""}`.trim();
-        const formattedMessage = `[Telegram from ${userInfo}]: ${msg.text}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
+
+        let messageContent = text || "";
+
+        if (msg.photo) {
+          const photo = msg.photo.pop();
+          const filePath = await bot.getFileLink(photo.file_id);
+          messageContent += `\n[Image: ${filePath}]`;
+        } else if (msg.document) {
+          messageContent += `\n[Document: ${msg.document.file_name || "unknown"}]`;
+        } else if (msg.video) {
+          messageContent += `\n[Video attached]`;
+        } else if (msg.animation) {
+          messageContent += `\n[Animation attached]`;
+        } else if (msg.voice) {
+          messageContent += `\n[Voice message attached]`;
+        } else if (msg.audio) {
+          messageContent += `\n[Audio file attached]`;
+        }
+
+        const formattedMessage = `[Telegram from ${userInfo}]: ${messageContent}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
 
         pi.sendUserMessage(formattedMessage);
       });
