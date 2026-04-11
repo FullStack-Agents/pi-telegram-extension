@@ -19,6 +19,16 @@ function parseAllowedUserIds(): Set<number> {
   return set;
 }
 
+function parseAllowedGroupChatIds(): Set<number> {
+  const raw = process.env.TELEGRAM_ALLOWED_GROUP_CHAT_IDS ?? "";
+  const set = new Set<number>();
+  for (const part of raw.split(",")) {
+    const n = Number(part.trim());
+    if (Number.isInteger(n)) set.add(n);
+  }
+  return set;
+}
+
 function getBotToken(): string {
   const t = process.env.TELEGRAM_BOT_TOKEN;
   if (!t?.trim()) {
@@ -31,6 +41,7 @@ function getBotToken(): string {
 
 const allowlistEnabled = parseAllowlistEnabled();
 const allowedUserIds = parseAllowedUserIds();
+const allowedGroupChatIds = parseAllowedGroupChatIds();
 
 /** Chat IDs we have accepted an inbound message from while allowlist is on (outbound allowlist). */
 const allowedOutboundChatIds = new Set<number>();
@@ -48,20 +59,26 @@ const activeChats = new Map<
 // Track the current Telegram chat for auto-reply
 let currentTelegramChatId: number | null = null;
 
-function isAllowedTelegramUser(msg: TelegramBot.Message): boolean {
+function isAllowedTelegramMessage(msg: TelegramBot.Message): boolean {
   if (!allowlistEnabled) return true;
+  if (allowedGroupChatIds.has(msg.chat.id)) return true;
   const userId = msg.from?.id;
   return typeof userId === "number" && allowedUserIds.has(userId);
 }
 
 function canSendToTelegramChat(chatId: number): boolean {
   if (!allowlistEnabled) return true;
+  if (allowedGroupChatIds.has(chatId)) return true;
   return allowedOutboundChatIds.has(chatId);
 }
 
 function recordAllowedInboundChat(msg: TelegramBot.Message): void {
   const chatId = msg.chat.id;
   if (!allowlistEnabled) return;
+  if (allowedGroupChatIds.has(chatId)) {
+    allowedOutboundChatIds.add(chatId);
+    return;
+  }
   const userId = msg.from?.id;
   if (typeof userId === "number" && allowedUserIds.has(userId)) {
     allowedOutboundChatIds.add(chatId);
@@ -89,16 +106,20 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify(`Telegram bot connected: @${botInfo.username}`, "info");
 
       if (allowlistEnabled) {
-        if (allowedUserIds.size === 0) {
+        if (allowedUserIds.size === 0 && allowedGroupChatIds.size === 0) {
           ctx.ui.notify(
-            "Telegram allowlist is enabled but TELEGRAM_ALLOWED_USER_IDS is empty — no users can use the bot.",
+            "Telegram allowlist is enabled but TELEGRAM_ALLOWED_USER_IDS and TELEGRAM_ALLOWED_GROUP_CHAT_IDS are empty — no one can use the bot.",
             "warning"
           );
         } else {
-          ctx.ui.notify(
-            `Telegram user allowlist enabled (${allowedUserIds.size} user(s)).`,
-            "info"
-          );
+          const parts: string[] = [];
+          if (allowedUserIds.size > 0) {
+            parts.push(`${allowedUserIds.size} allowlisted user(s)`);
+          }
+          if (allowedGroupChatIds.size > 0) {
+            parts.push(`${allowedGroupChatIds.size} allowlisted group chat(s)`);
+          }
+          ctx.ui.notify(`Telegram allowlist enabled (${parts.join(", ")}).`, "info");
         }
       } else {
         ctx.ui.notify(
@@ -111,7 +132,7 @@ export default function (pi: ExtensionAPI) {
       pollingStarted = true;
 
       bot.on("message", async (msg) => {
-        if (!isAllowedTelegramUser(msg)) return;
+        if (!isAllowedTelegramMessage(msg)) return;
 
         recordAllowedInboundChat(msg);
 
@@ -170,7 +191,7 @@ export default function (pi: ExtensionAPI) {
       });
 
       bot.onText(/\/new/, async (msg) => {
-        if (!isAllowedTelegramUser(msg)) return;
+        if (!isAllowedTelegramMessage(msg)) return;
 
         recordAllowedInboundChat(msg);
 
@@ -180,7 +201,7 @@ export default function (pi: ExtensionAPI) {
       });
 
       bot.onText(/\/stop/, async (msg) => {
-        if (!isAllowedTelegramUser(msg)) return;
+        if (!isAllowedTelegramMessage(msg)) return;
 
         recordAllowedInboundChat(msg);
 
@@ -196,7 +217,7 @@ export default function (pi: ExtensionAPI) {
       const anyCtx = ctx as any;
 
       if (event.prompt.includes("[Telegram from")) {
-        const chatIdMatch = event.prompt.match(/chatId=(\d+)/);
+        const chatIdMatch = event.prompt.match(/chatId=(-?\d+)/);
         if (chatIdMatch) {
           const chatId = parseInt(chatIdMatch[1], 10);
 
@@ -281,7 +302,7 @@ export default function (pi: ExtensionAPI) {
 
       if (!canSendToTelegramChat(chatId)) {
         throw new Error(
-          `Refused: chat ${chatId} is not allowed for outbound Telegram messages. With the user allowlist enabled, only chats that have already messaged this bot from an allowlisted user may be targeted.`
+          `Refused: chat ${chatId} is not allowed for outbound Telegram messages. With the allowlist enabled, only allowlisted group chats, or chats that have already messaged this bot from an allowlisted user, may be targeted.`
         );
       }
 
