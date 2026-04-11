@@ -111,9 +111,6 @@ export default function (pi: ExtensionAPI) {
       pollingStarted = true;
 
       bot.on("message", async (msg) => {
-        if (!msg.text) return;
-        if (msg.text.startsWith("/")) return;
-
         if (!isAllowedTelegramUser(msg)) return;
 
         recordAllowedInboundChat(msg);
@@ -132,7 +129,34 @@ export default function (pi: ExtensionAPI) {
         const userInfo = username
           ? `@${username}`
           : `${firstName || ""} ${lastName || ""}`.trim();
-        const formattedMessage = `[Telegram from ${userInfo}]: ${msg.text}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
+
+        let text = msg.text || msg.caption || "";
+        let attachmentInfo = "";
+
+        if (msg.photo) {
+          const photo = msg.photo[msg.photo.length - 1];
+          if (!photo) return;
+          const filePath = await bot.getFileLink(photo.file_id);
+          attachmentInfo = `\n[Image: ${filePath}]`;
+        } else if (msg.document) {
+          const doc = msg.document;
+          const filePath = await bot.getFileLink(doc.file_id);
+          attachmentInfo = `\n[Document: ${doc.file_name || "unknown"} (${filePath})]`;
+        } else if (msg.video) {
+          const filePath = await bot.getFileLink(msg.video.file_id);
+          attachmentInfo = `\n[Video: ${filePath}]`;
+        } else if (msg.voice) {
+          const filePath = await bot.getFileLink(msg.voice.file_id);
+          attachmentInfo = `\n[Voice: ${filePath}]`;
+        } else if (msg.audio) {
+          const filePath = await bot.getFileLink(msg.audio.file_id);
+          attachmentInfo = `\n[Audio: ${filePath}]`;
+        }
+
+        if (!text && !attachmentInfo) return;
+        if (text.startsWith("/")) return;
+
+        const formattedMessage = `[Telegram from ${userInfo}]: ${text}${attachmentInfo}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
 
         pi.sendUserMessage(formattedMessage);
       });
