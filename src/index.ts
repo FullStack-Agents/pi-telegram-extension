@@ -232,7 +232,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      await bot.sendMessage(telegramChatId, responseText);
+      await bot.sendMessage(telegramChatId, responseText, { parse_mode: "Markdown" });
     } catch (error) {
       console.error("Failed to auto-reply to Telegram:", error);
     } finally {
@@ -262,7 +262,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       try {
-        await bot.sendMessage(chatId, message);
+        await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         return {
           content: [{ type: "text", text: `Message sent to chat ${chatId}` }],
           details: { chatId, message },
