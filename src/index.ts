@@ -263,7 +263,7 @@ export default function (pi: ExtensionAPI) {
 
         const chatId = msg.chat.id;
         await bot.sendMessage(chatId, "🔄 Creating new Pi session...");
-        pi.sendUserMessage("/new");
+        pi.sendUserMessage("/new", { expandPromptTemplates: true });
       });
 
       bot.onText(/\/stop/, async (msg) => {
@@ -343,7 +343,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      await bot.sendMessage(telegramChatId, responseText);
+      await bot.sendMessage(telegramChatId, responseText, { parse_mode: "Markdown" });
     } catch (error) {
       console.error("Failed to auto-reply to Telegram:", error);
     } finally {
@@ -373,7 +373,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       try {
-        await bot.sendMessage(chatId, message);
+        await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
         return {
           content: [{ type: "text", text: `Message sent to chat ${chatId}` }],
           details: { chatId, message },
@@ -410,6 +410,13 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       ctx.abort();
       ctx.ui.notify("Execution stopped via Telegram", "info");
+    },
+  });
+
+  pi.registerCommand("new", {
+    description: "Start a new session (triggered from Telegram)",
+    handler: async (_args, ctx) => {
+      await ctx.newSession();
     },
   });
 }
