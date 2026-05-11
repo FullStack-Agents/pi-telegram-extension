@@ -343,7 +343,12 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      await bot.sendMessage(telegramChatId, responseText, { parse_mode: "Markdown" });
+      try {
+        await bot.sendMessage(telegramChatId, responseText, { parse_mode: "Markdown" });
+      } catch {
+        // If Markdown parsing fails, fall back to plain text
+        await bot.sendMessage(telegramChatId, responseText, { parse_mode: undefined });
+      }
     } catch (error) {
       console.error("Failed to auto-reply to Telegram:", error);
     } finally {
@@ -378,8 +383,17 @@ export default function (pi: ExtensionAPI) {
           content: [{ type: "text", text: `Message sent to chat ${chatId}` }],
           details: { chatId, message },
         };
-      } catch (error) {
-        throw new Error(`Failed to send message: ${error}`);
+      } catch (_markdownErr) {
+        // If Markdown parsing fails (e.g. unescaped underscores), fall back to plain text.
+        try {
+          await bot.sendMessage(chatId, message, { parse_mode: undefined });
+          return {
+            content: [{ type: "text", text: `Message sent to chat ${chatId} (plain text fallback)` }],
+            details: { chatId, message },
+          };
+        } catch (error) {
+          throw new Error(`Failed to send message: ${error}`);
+        }
       }
     },
   });
