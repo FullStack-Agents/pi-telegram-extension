@@ -263,7 +263,7 @@ export default function (pi: ExtensionAPI) {
 
         const chatId = msg.chat.id;
         await bot.sendMessage(chatId, "🔄 Creating new Pi session...");
-        pi.sendUserMessage("/new");
+        pi.sendUserMessage("/new", { expandPromptTemplates: true });
       });
 
       bot.onText(/\/stop/, async (msg) => {
