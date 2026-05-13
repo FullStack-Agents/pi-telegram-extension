@@ -107,37 +107,25 @@ Chronological log of the Pi Telegram extension development.
 
 Approximately 2 hours from start to working implementation.
 
-## Phase 9: Slash Commands (/new and /stop)
+## Phase 9: Slash Commands (historical — see Phase 10)
 
-### 2026-03-16: Command Implementation
-- **Time:** ~1:45 PM - 2:00 PM
-- **Features added:**
-  - `/new` command - Creates new Pi session
-  - `/stop` command - Aborts current execution
-  - Command filtering - Messages starting with `/` are not forwarded as regular text
-- **Implementation approach:**
-  - Used `bot.onText()` regex handlers for Telegram commands
-  - `/new` triggers Pi's built-in `/new` command via `sendUserMessage()`
-  - `/stop` triggers custom `/telegram_stop` Pi command that calls `ctx.abort()`
-  - Added `telegram_stop` command registration in Pi
-- **Key constraint discovered:** `ctx.newSession()` and `ctx.abort()` only available in command handlers, not event handlers
-- **Solution:** Use `sendUserMessage()` to trigger Pi commands
-- **Delegated to Pi:** Tasks 7.1, 7.2, 7.3 (implementation)
-- **Result:** ✅ Both commands working!
+### 2026-03-16: Command Implementation (superseded)
 
-### Command Testing
-- `/new` - Successfully creates new session with confirmation message
-- `/stop` - Successfully aborts execution with confirmation message
+- **Features added:** Telegram `/stop`, filtering of `/`-prefixed Telegram text, and an early approach to “new session” from Telegram.
+- **Original doc claim:** `/new` called Pi’s built-in `/new` via `sendUserMessage("/new")` — **this was never aligned with the extension API** (built-in slash names vary; session replacement belongs on `ExtensionCommandContext`).
+- **Correct constraint:** `ctx.newSession()` and `ctx.abort()` are only available on **`ExtensionCommandContext`** (e.g. `registerCommand` handlers), not on `session_start`’s `ctx`.
 
-## Total Development Time
+## Phase 10: `/newsession` only + Pi 0.74+ (2026-05-13)
 
-Approximately 2.5 hours from start to working implementation with slash commands.
+- **Telegram UX:** Only **`/newsession`** is registered on the bot (no `/new`). Telegram sends a confirmation message, then `pi.sendUserMessage("/newsession")` dispatches the extension’s `registerCommand("newsession")` handler.
+- **Pi command:** `registerCommand("newsession", …)` uses `await ctx.waitForIdle()` then `await ctx.newSession()`.
+- **Agent requirement:** `@earendil-works/pi-coding-agent` **0.74+** (or equivalent) so `sendUserMessage("/newsession")` actually runs the extension command instead of sending raw `/newsession` text to the model.
+- **Lesson captured:** `dev-docs/GOTCHAS.md` (Gotcha 9), `LESSONS_LEARNED.md` (Lesson 11).
 
 ## Next Steps (If Continuing)
 
 1. Add persistent storage for chat history
-2. Support media messages (images, documents)
+2. Extend or harden media handling (thumbnails, captions, size limits)
 3. Add rate limiting
-4. Move bot token to environment variables
-5. Add more commands (/start, /help, /status)
-6. Support group chats
+4. Add more commands (`/start`, `/help`, `/status`)
+5. Improve multi-chat / group concurrency beyond single `currentTelegramChatId`

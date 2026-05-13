@@ -29,7 +29,7 @@ Set these in the same environment that launches Pi (e.g. your shell profile, sys
 | `TELEGRAM_ALLOWED_USER_IDS` | When allowlist on | — | Comma-separated numeric Telegram user IDs that may DM the bot and receive replies. Ignored when the allowlist is disabled. |
 | `TELEGRAM_ALLOWED_GROUP_CHAT_IDS` | When allowlist on | — | Comma-separated numeric Telegram **chat** IDs for groups/supergroups where anyone may message the bot and receive replies. Use the negative ID Telegram reports for the group (e.g. `-5017058965`). Ignored when the allowlist is disabled. |
 
-With the allowlist **enabled** (default), only listed users (in DMs or any chat) or anyone in an allowlisted group can trigger `/new`, `/stop`, and normal messages. Outbound sends (`telegram_send` and auto-reply) are allowed to allowlisted group chat IDs, and to other `chat_id` values the bot has already seen from an allowlisted user (e.g. that user’s DM or a group after they used a command).
+With the allowlist **enabled** (default), only listed users (in DMs or any chat) or anyone in an allowlisted group can trigger `/newsession`, `/stop`, and normal messages. Outbound sends (`telegram_send` and auto-reply) are allowed to allowlisted group chat IDs, and to other `chat_id` values the bot has already seen from an allowlisted user (e.g. that user’s DM or a group after they used a command).
 
 With the allowlist **disabled**, behavior matches the previous open setup: any Telegram user can interact with the bot, and `telegram_send` may target any chat ID.
 
@@ -55,15 +55,16 @@ The extension supports the following slash commands:
 
 | Command | Description |
 |---------|-------------|
-| `/new` | Create a new Pi session (clears context) |
+| `/newsession` | Create a new Pi session (clears context via extension command) |
 | `/stop` | Stop current Pi execution immediately |
 
-### /new Command
-Creates a fresh Pi session with an empty context window. Useful when you want to start a new conversation without restarting Pi.
+### `/newsession`
 
-**Usage:** Send `/new` in Telegram
+Dispatches the extension-registered Pi command `/newsession` (which calls `ctx.newSession()` after `ctx.waitForIdle()`). It is not forwarded as normal user text to the model.
 
-**Response:** "🔄 Creating new Pi session..."
+**Usage:** Send `/newsession` in Telegram.
+
+**Response:** "🔄 Creating new session..."
 
 ### /stop Command
 Immediately aborts any ongoing Pi execution. Use this when Pi goes off the rails or gets stuck in a loop.

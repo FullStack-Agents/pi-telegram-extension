@@ -214,6 +214,26 @@ Or use exponential backoff for retries.
 
 ---
 
+## Gotcha 9: `TypeError: ctx.newSession is not a function`
+
+**Symptoms:**
+
+- Telegram `/newsession` crashes the process
+- Stack trace points at `ctx.newSession` inside a Telegram `bot.onText` or `bot.on("message")` handler
+
+**Cause:**
+
+`session_start` (and other non-command extension handlers) receive **`ExtensionContext`**, which does not include `newSession`, `fork`, `switchSession`, or `reload`. Those exist only on **`ExtensionCommandContext`**, passed to **`pi.registerCommand(..., handler)`**.
+
+**Fix pattern:**
+
+1. Implement session changes in `registerCommand("newsession", { handler })` using `ctx.waitForIdle()` then `ctx.newSession()`.
+2. From Telegram, call `pi.sendUserMessage("/newsession")` so Pi dispatches that command (not `ctx` from `session_start`).
+
+**Also check Pi version:** Older agents treated `sendUserMessage("/foo")` as literal user text (no extension command dispatch). Use **`@earendil-works/pi-coding-agent` 0.74+** (or equivalent upstream) so idle extension-originated `/command` lines can run registered extension commands.
+
+---
+
 ## Quick Diagnostic Commands
 
 ### Check extension is loaded

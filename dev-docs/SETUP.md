@@ -32,8 +32,10 @@ Create `/home/ben/pi-telegram-extension/package.json`:
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.58.3",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "@sinclair/typebox": "^0.34.0",
+    "@types/fs-extra": "^11.0.4",
+    "fs-extra": "^11.3.4",
     "node-telegram-bot-api": "^0.66.0"
   },
   "devDependencies": {
@@ -144,13 +146,15 @@ Telegram bot connected: @trout_pi_bot
 
 ### Testing Commands
 
-**Test /new:**
-```
-/new
-```
-Expected: "🔄 Creating new Pi session..."
+**Test `/newsession`:**
 
-**Test /stop:**
+```
+/newsession
+```
+
+Expected: "🔄 Creating new session..." then a new Pi session (requires a Pi version whose `sendUserMessage` dispatches extension slash commands when idle, e.g. `@earendil-works/pi-coding-agent` **0.74+** with the `tryExtensionCommands` behavior).
+
+**Test `/stop`:**
 1. Ask Pi to do something long-running
 2. Send `/stop`
 Expected: "🛑 Stopping current execution..."

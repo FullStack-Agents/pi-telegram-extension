@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import TelegramBot from "node-telegram-bot-api";
 import fs from "fs-extra";
@@ -258,12 +258,12 @@ export default function (pi: ExtensionAPI) {
 
       bot.onText(/^\/newsession\s*$/, async (msg) => {
         if (!isAllowedTelegramMessage(msg)) return;
-
         recordAllowedInboundChat(msg);
-
         const chatId = msg.chat.id;
         await bot.sendMessage(chatId, "🔄 Creating new session...");
-        await (ctx as any).newSession();
+        // session_start ctx is ExtensionContext — no newSession(). Dispatch the extension-registered
+        // /newsession command via sendUserMessage (Pi runs extension slash commands for idle extension input).
+        pi.sendUserMessage("/newsession");
       });
 
       bot.onText(/\/stop/, async (msg) => {
@@ -428,9 +428,13 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("newsession", {
-    description: "Start a new session (triggered from Telegram)",
+    description: "Start a new session (Pi /newsession; also used from Telegram)",
     handler: async (_args, ctx) => {
-      await ctx.newSession();
+      await ctx.waitForIdle();
+      const result = await ctx.newSession();
+      if (!result.cancelled) {
+        ctx.ui.notify("New session started.", "info");
+      }
     },
   });
 }

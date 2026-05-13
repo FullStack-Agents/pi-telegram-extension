@@ -90,9 +90,10 @@ Pi auto-discovers extensions from this directory.
 
 ## Dependencies
 
-- `@mariozechner/pi-coding-agent` - Pi extension API types
-- `@sinclair/typebox` - JSON schema validation for tool parameters
-- `node-telegram-bot-api` - Telegram Bot API client
+- `@earendil-works/pi-coding-agent` — Pi extension API and types (npm scope may change with upstream releases; see root `package.json`)
+- `@sinclair/typebox` — JSON schema validation for tool parameters
+- `fs-extra` — optional file helpers for downloaded media
+- `node-telegram-bot-api` — Telegram Bot API client
 
 ## Configuration
 
@@ -123,21 +124,22 @@ Configure via environment variables (see the project `README.md`):
 | Command | Purpose |
 |---------|---------|
 | `/telegram_chats` | List active Telegram conversations |
-| `/telegram_stop` | Stop current execution (triggered from Telegram /stop) |
+| `/telegram_stop` | Stop current execution (triggered from Telegram `/stop`) |
+| `/newsession` | Start a new Pi session (same entry point as `pi.sendUserMessage("/newsession")` from Telegram) |
 
 ### Telegram Bot Commands
 
-The extension handles these Telegram slash commands directly:
+The extension handles these Telegram slash commands directly (they are **not** forwarded as normal Telegram text to the model):
 
 | Command | Description |
 |---------|-------------|
-| `/new` | Create a new Pi session (clears context window) |
+| `/newsession` | New Pi session (clears context window) |
 | `/stop` | Immediately stop current Pi execution |
 
 **How they work:**
-- `/new` - Sends confirmation message, then triggers Pi's built-in `/new` command
-- `/stop` - Sends confirmation message, then triggers `/telegram_stop` Pi command which calls `ctx.abort()`
-- Commands are processed by the extension and NOT forwarded to Pi as regular text messages
+
+- `/newsession` — Telegram sends a confirmation message, then `pi.sendUserMessage("/newsession")` runs the extension’s `registerCommand("newsession")` handler (which uses `ExtensionCommandContext`: `waitForIdle()` then `newSession()`). You cannot call `newSession()` from `session_start` / `bot.on("message")` context; that `ctx` is only `ExtensionContext`.
+- `/stop` — Sends confirmation, then `pi.sendUserMessage("/telegram_stop")` runs the `/telegram_stop` command (`ctx.abort()`).
 
 ## Message Format
 
@@ -155,19 +157,17 @@ Or if no username:
 
 ### Current Limitations
 
-1. **No message history** - Extension doesn't persist chat history across Pi restarts
-2. **Single chat tracking** - Only tracks one `currentTelegramChatId` at a time
-3. **No media support** - Only handles text messages
-4. **No rate limiting** - Could hit Telegram API limits with high volume
+1. **No message history** — Extension does not persist chat history across Pi restarts
+2. **Single chat tracking** — Only one `currentTelegramChatId` at a time for auto-reply (last Telegram message wins)
+3. **No rate limiting** — High volume could hit Telegram API limits
 
 ### Potential Improvements
 
-1. **Persistent storage** - Store chat history in SQLite or JSON file
-2. **Multi-chat support** - Track multiple concurrent conversations
-3. **Media handling** - Support images, documents, voice messages
-4. **Rate limiting** - Add exponential backoff for API calls
-5. **Reply threading** - Support Telegram reply-to-message feature
-6. **Command parsing** - Handle Telegram bot commands (/start, /help, etc.)
+1. **Persistent storage** — Store chat history in SQLite or JSON file
+2. **Multi-chat support** — Map Pi turns to Telegram `chat_id` instead of a single module variable
+3. **Rate limiting** — Exponential backoff for Telegram sends
+4. **Reply threading** — Support Telegram reply-to-message feature
+5. **Command parsing** — Handle `/start`, `/help`, etc.
 
 ## Debugging
 

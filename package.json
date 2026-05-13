@@ -10,7 +10,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.58.3",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "@sinclair/typebox": "^0.34.0",
     "@types/fs-extra": "^11.0.4",
     "fs-extra": "^11.3.4",

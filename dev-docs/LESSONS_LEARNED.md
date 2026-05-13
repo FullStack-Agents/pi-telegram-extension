@@ -157,6 +157,19 @@ The Telegram message handler calls `sendUserMessage()` when a message arrives. S
 
 ---
 
+## Lesson 11: `ExtensionContext` vs `ExtensionCommandContext` (session control)
+
+**What went wrong:**
+Code in a Telegram callback (or any handler that only receives `ExtensionContext`) called `ctx.newSession()` or used `(ctx as any).newSession()`. That throws because `newSession` is not on `ExtensionContext`.
+
+**What works:**
+- Register `pi.registerCommand("newsession", { handler })` and call `await ctx.waitForIdle(); await ctx.newSession();` inside that handler.
+- From Telegram (or any place that only has `ExtensionContext` / `ExtensionAPI`), use `pi.sendUserMessage("/newsession")` so the command handler runs with a real `ExtensionCommandContext`.
+
+**Related:** Pi’s `sendUserMessage` must dispatch leading `/name` as an extension command when appropriate (idle path). That behavior is present in recent `@earendil-works/pi-coding-agent` releases used with this extension.
+
+---
+
 ## Lesson 10: Error Handling for Telegram API
 
 **Common errors:**
