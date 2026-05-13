@@ -256,14 +256,14 @@ export default function (pi: ExtensionAPI) {
         console.error("Telegram polling error:", error);
       });
 
-      bot.onText(/\/new/, async (msg) => {
+      bot.onText(/^\/new\s*$/, async (msg) => {
         if (!isAllowedTelegramMessage(msg)) return;
 
         recordAllowedInboundChat(msg);
 
         const chatId = msg.chat.id;
         await bot.sendMessage(chatId, "🔄 Creating new Pi session...");
-        pi.sendUserMessage("/new", { expandPromptTemplates: true });
+        pi.sendUserMessage("/new");
       });
 
       bot.onText(/\/stop/, async (msg) => {
