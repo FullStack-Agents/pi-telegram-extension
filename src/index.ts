@@ -256,14 +256,14 @@ export default function (pi: ExtensionAPI) {
         console.error("Telegram polling error:", error);
       });
 
-      bot.onText(/^\/new\s*$/, async (msg) => {
+      bot.onText(/^\/newsession\s*$/, async (msg) => {
         if (!isAllowedTelegramMessage(msg)) return;
 
         recordAllowedInboundChat(msg);
 
         const chatId = msg.chat.id;
-        await bot.sendMessage(chatId, "🔄 Creating new Pi session...");
-        pi.sendUserMessage("/new");
+        await bot.sendMessage(chatId, "🔄 Creating new session...");
+        await (ctx as any).newSession();
       });
 
       bot.onText(/\/stop/, async (msg) => {
@@ -427,7 +427,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("new", {
+  pi.registerCommand("newsession", {
     description: "Start a new session (triggered from Telegram)",
     handler: async (_args, ctx) => {
       await ctx.newSession();
