@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { sendUserMessage } from "./send-user-message.js";
 import { Type } from "@sinclair/typebox";
 import TelegramBot from "node-telegram-bot-api";
 import fs from "fs-extra";
@@ -280,7 +281,7 @@ export default function (pi: ExtensionAPI) {
         pollingStarted = false;
         // session_start ctx is ExtensionContext — no newSession(). Dispatch the extension-registered
         // /newsession command via sendUserMessage with expandPromptTemplates: true.
-        pi.sendUserMessage("/newsession", { expandPromptTemplates: true });
+        sendUserMessage(pi, "/newsession", { expandPromptTemplates: true });
       });
 
       bot.onText(/\/stop/, async (msg) => {
