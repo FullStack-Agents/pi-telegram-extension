@@ -95,7 +95,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_shutdown", async () => {
     if (bot) {
-      bot.stopPolling();
+      await bot.stopPolling({ cancel: true });
       pollingStarted = false;
       bot = null as any;
     }
@@ -274,13 +274,26 @@ export default function (pi: ExtensionAPI) {
         recordAllowedInboundChat(msg);
         const chatId = msg.chat.id;
         await bot.sendMessage(chatId, "🔄 Creating new session...");
-        // Stop polling on THIS instance before dispatching /newsession.
-        // The new session will spawn a new child process which starts its own polling.
-        // Without this, two processes fight for the same bot token → 409 Conflict.
-        bot.stopPolling();
+        // Stop polling immediately with cancel so the old bot doesn't interfere
+        // with the new session's bot (prevents 409 Conflict).
+        await bot.stopPolling({ cancel: true });
         pollingStarted = false;
-        // session_start ctx is ExtensionContext — no newSession(). Dispatch the extension-registered
-        // /newsession command via sendUserMessage with expandPromptTemplates: true.
+        // Consume all pending Telegram updates so the new bot instance doesn't
+        // re-process this /newsession message (prevents infinite restart loop).
+        try {
+          const updates = await bot.getUpdates({ timeout: 0 });
+          if (updates && updates.length > 0) {
+            const maxUpdateId = updates.reduce(
+              (max: number, u: any) => Math.max(max, u.update_id),
+              0
+            );
+            await bot.getUpdates({ offset: maxUpdateId + 1, timeout: 0 });
+          }
+        } catch (e) {
+          console.error("Failed to consume pending updates:", e);
+        }
+        // Dispatch the extension-registered /newsession command via sendUserMessage
+        // with expandPromptTemplates: true.
         sendUserMessage(pi, "/newsession", { expandPromptTemplates: true });
       });
 
@@ -450,9 +463,9 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       await ctx.waitForIdle();
       // Stop Telegram polling before creating new session to avoid 409 Conflict.
-      // The new session spawns a child process that starts its own polling.
+      // The new session creates a new runtime which starts its own polling.
       if (bot && pollingStarted) {
-        bot.stopPolling();
+        await bot.stopPolling({ cancel: true });
         pollingStarted = false;
       }
       await ctx.newSession({
