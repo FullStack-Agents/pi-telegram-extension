@@ -1,10 +1,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { sendUserMessage } from "./send-user-message.js";
 import { Type } from "@sinclair/typebox";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import TelegramBot from "node-telegram-bot-api";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
+
+const execFileAsync = promisify(execFile);
 
 function parseAllowlistEnabled(): boolean {
   const v = process.env.TELEGRAM_ALLOWLIST_ENABLED;
@@ -209,6 +213,57 @@ export default function (pi: ExtensionAPI) {
             console.error("Error downloading telegram video:", e);
             attachmentInfo = `\n[Video: ${filePath}]`;
           }
+        } else if (msg.video_note) {
+          const filePath = await bot.getFileLink(msg.video_note.file_id);
+          const videoPath = path.join(tmpDir, `tg_videonote_${msg.video_note.file_id}.mp4`);
+          const audioPath = path.join(tmpDir, `tg_videonote_${msg.video_note.file_id}.ogg`);
+
+          try {
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch video note: ${response.statusText}`);
+            const arrayBuffer = await response.arrayBuffer();
+            await fs.writeFile(videoPath, Buffer.from(arrayBuffer));
+
+            // Extract audio using ffmpeg
+            try {
+              await execFileAsync("ffmpeg", [
+                "-i", videoPath,
+                "-vn",
+                "-acodec", "libopus",
+                "-y",
+                audioPath,
+              ], { timeout: 30000 });
+
+              // Transcribe using OpenAI Whisper
+              const transcribeScript = path.join(
+                os.homedir(), "images", "transcribe_whisper.py"
+              );
+              const venvPython = path.join(os.homedir(), "venvs", "openai", "bin", "python3");
+
+              try {
+                const { stdout } = await execFileAsync(venvPython, [transcribeScript, audioPath, "--model", "whisper-1"], {
+                  timeout: 60000,
+                  maxBuffer: 10 * 1024 * 1024,
+                });
+                const transcription = stdout.trim();
+                if (transcription) {
+                  text = transcription;
+                  attachmentInfo = "";
+                } else {
+                  attachmentInfo = `\n[Video message: ${videoPath}] (empty transcription)`;
+                }
+              } catch (transcribeErr) {
+                console.error("Error transcribing video note:", transcribeErr);
+                attachmentInfo = `\n[Video message: ${videoPath}] (transcription failed)`;
+              }
+            } catch (ffmpegErr) {
+              console.error("Error extracting audio from video note:", ffmpegErr);
+              attachmentInfo = `\n[Video message: ${videoPath}] (audio extraction failed)`;
+            }
+          } catch (e) {
+            console.error("Error downloading telegram video note:", e);
+            attachmentInfo = `\n[Video message: ${filePath}]`;
+          }
         } else if (msg.voice) {
           const filePath = await bot.getFileLink(msg.voice.file_id);
           const fileName = `tg_voice_${msg.voice.file_id}.ogg`;
@@ -219,7 +274,30 @@ export default function (pi: ExtensionAPI) {
             if (!response.ok) throw new Error(`Failed to fetch voice: ${response.statusText}`);
             const arrayBuffer = await response.arrayBuffer();
             await fs.writeFile(localPath, Buffer.from(arrayBuffer));
-            attachmentInfo = `\n[Voice: ${localPath}]`;
+
+            // Transcribe using OpenAI Whisper
+            const transcribeScript = path.join(
+              os.homedir(), "images", "transcribe_whisper.py"
+            );
+            const resolvedScript = path.resolve(transcribeScript);
+            const venvPython = path.join(os.homedir(), "venvs", "openai", "bin", "python3");
+
+            try {
+              const { stdout } = await execFileAsync(venvPython, [resolvedScript, localPath, "--model", "whisper-1"], {
+                timeout: 60000,
+                maxBuffer: 10 * 1024 * 1024,
+              });
+              const transcription = stdout.trim();
+              if (transcription) {
+                text = transcription;
+                attachmentInfo = "";
+              } else {
+                attachmentInfo = `\n[Voice: ${localPath}] (empty transcription)`;
+              }
+            } catch (transcribeErr) {
+              console.error("Error transcribing voice message:", transcribeErr);
+              attachmentInfo = `\n[Voice: ${localPath}] (transcription failed)`;
+            }
           } catch (e) {
             console.error("Error downloading telegram voice:", e);
             attachmentInfo = `\n[Voice: ${filePath}]`;
@@ -390,22 +468,44 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "telegram_send",
     label: "Send Telegram Message",
-    description: "Send a message to a Telegram user or chat",
+    description: "Send a message or image to a Telegram user or chat",
     parameters: Type.Object({
       chatId: Type.Number({ description: "Telegram chat ID to send message to" }),
       message: Type.String({ description: "Message text to send" }),
+      imagePath: Type.Optional(Type.String({ description: "Optional path to an image file to send" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       if (!bot) {
         throw new Error("Telegram bot not initialized");
       }
 
-      const { chatId, message } = params as { chatId: number; message: string };
+      const { chatId, message, imagePath } = params as { chatId: number; message: string; imagePath?: string };
 
       if (!canSendToTelegramChat(chatId)) {
         throw new Error(
           `Refused: chat ${chatId} is not allowed for outbound Telegram messages. With the allowlist enabled, only allowlisted group chats, or chats that have already messaged this bot from an allowlisted user, may be targeted.`
         );
+      }
+
+      if (imagePath) {
+        // Send image with optional caption
+        try {
+          await bot.sendPhoto(chatId, imagePath, { caption: message, parse_mode: "Markdown" });
+          return {
+            content: [{ type: "text", text: `Image sent to chat ${chatId}` }],
+            details: { chatId, message, imagePath },
+          };
+        } catch (_markdownErr) {
+          try {
+            await bot.sendPhoto(chatId, imagePath, { caption: message, parse_mode: undefined });
+            return {
+              content: [{ type: "text", text: `Image sent to chat ${chatId} (plain text caption fallback)` }],
+              details: { chatId, message, imagePath },
+            };
+          } catch (error) {
+            throw new Error(`Failed to send image: ${error}`);
+          }
+        }
       }
 
       try {
