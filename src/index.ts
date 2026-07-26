@@ -54,6 +54,12 @@ const allowedGroupChatIds = parseAllowedGroupChatIds();
 /** Chat IDs we have accepted an inbound message from while allowlist is on (outbound allowlist). */
 const allowedOutboundChatIds = new Set<number>();
 
+// Pre-populate outbound allowlist from allowed user IDs
+// (user DM chats have the same ID as the user, so outbound to them is safe)
+for (const userId of allowedUserIds) {
+  allowedOutboundChatIds.add(userId);
+}
+
 // Store active chat IDs and their associated Pi sessions
 const activeChats = new Map<
   number,
@@ -525,6 +531,54 @@ export default function (pi: ExtensionAPI) {
         } catch (error) {
           throw new Error(`Failed to send message: ${error}`);
         }
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "telegram_send_photo",
+    label: "Send Telegram Photo",
+    description: "Send a photo image to a Telegram user or chat",
+    parameters: Type.Object({
+      chatId: Type.Number({ description: "Telegram chat ID to send photo to" }),
+      photoPath: Type.String({ description: "Local file path to the photo image" }),
+      caption: Type.Optional(Type.String({ description: "Optional caption for the photo" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      if (!bot) {
+        throw new Error("Telegram bot not initialized");
+      }
+
+      const { chatId, photoPath, caption } = params as {
+        chatId: number;
+        photoPath: string;
+        caption?: string;
+      };
+
+      if (!canSendToTelegramChat(chatId)) {
+        throw new Error(
+          `Refused: chat ${chatId} is not allowed for outbound Telegram messages.`
+        );
+      }
+
+      // Resolve the path and check the file exists
+      const resolvedPath = path.resolve(photoPath);
+      if (!(await fs.pathExists(resolvedPath))) {
+        throw new Error(`Photo file not found: ${resolvedPath}`);
+      }
+
+      try {
+        const photoBuffer = await fs.readFile(resolvedPath);
+        await bot.sendPhoto(chatId, photoBuffer, {
+          caption: caption || undefined,
+          parse_mode: caption ? "Markdown" : undefined,
+        });
+        return {
+          content: [{ type: "text", text: `Photo sent to chat ${chatId}` }],
+          details: { chatId, photoPath, caption },
+        };
+      } catch (error) {
+        throw new Error(`Failed to send photo: ${error}`);
       }
     },
   });
