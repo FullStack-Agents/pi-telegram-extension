@@ -234,14 +234,14 @@ export default function (pi: ExtensionAPI) {
                 audioPath,
               ], { timeout: 30000 });
 
-              // Transcribe using OpenAI Whisper
+              // Transcribe using Google Gemini (cheaper than OpenAI Whisper)
               const transcribeScript = path.join(
-                os.homedir(), "images", "transcribe_whisper.py"
+                os.homedir(), "images", "transcribe_audio.py"
               );
-              const venvPython = path.join(os.homedir(), "venvs", "openai", "bin", "python3");
+              const venvPython = path.join(os.homedir(), "venvs", "nano-banana", "bin", "python3");
 
               try {
-                const { stdout } = await execFileAsync(venvPython, [transcribeScript, audioPath, "--model", "whisper-1"], {
+                const { stdout } = await execFileAsync(venvPython, [transcribeScript, audioPath], {
                   timeout: 60000,
                   maxBuffer: 10 * 1024 * 1024,
                 });
@@ -275,15 +275,15 @@ export default function (pi: ExtensionAPI) {
             const arrayBuffer = await response.arrayBuffer();
             await fs.writeFile(localPath, Buffer.from(arrayBuffer));
 
-            // Transcribe using OpenAI Whisper
+            // Transcribe using Google Gemini (cheaper than OpenAI Whisper)
             const transcribeScript = path.join(
-              os.homedir(), "images", "transcribe_whisper.py"
+              os.homedir(), "images", "transcribe_audio.py"
             );
             const resolvedScript = path.resolve(transcribeScript);
-            const venvPython = path.join(os.homedir(), "venvs", "openai", "bin", "python3");
+            const venvPython = path.join(os.homedir(), "venvs", "nano-banana", "bin", "python3");
 
             try {
-              const { stdout } = await execFileAsync(venvPython, [resolvedScript, localPath, "--model", "whisper-1"], {
+              const { stdout } = await execFileAsync(venvPython, [resolvedScript, localPath], {
                 timeout: 60000,
                 maxBuffer: 10 * 1024 * 1024,
               });
