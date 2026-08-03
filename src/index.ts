@@ -330,7 +330,10 @@ export default function (pi: ExtensionAPI) {
 
         const formattedMessage = `[Telegram from ${userInfo}]: ${text}${attachmentInfo}\n\nTo reply, use: telegram_send with chatId=${chatId}`;
 
-        pi.sendUserMessage(formattedMessage);
+        // Use deliverAs: "steer" so that a message sent while the agent is
+        // already streaming is queued (delivered after the current tool call)
+        // instead of throwing "Agent is already processing".
+        pi.sendUserMessage(formattedMessage, { deliverAs: "steer" });
       });
 
       bot.on("error", (error) => {
