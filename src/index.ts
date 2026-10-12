@@ -102,8 +102,49 @@ function recordAllowedInboundChat(msg: TelegramBot.Message): void {
 export default function (pi: ExtensionAPI) {
   let bot: TelegramBot;
   let pollingStarted = false;
+  let watchdog: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Periodically verify the long-poll loop is actually advancing.
+   *
+   * node-telegram-bot-api updates `_polling._lastUpdate` on every successful
+   * getUpdates (at least once per long-poll cycle). If that timestamp goes
+   * stale, the poller has silently stalled and the process is otherwise
+   * healthy, so pm2 will never restart it. Left unhandled this means the bot
+   * stops receiving Telegram messages until the next session_start — which may
+   * never come. Restart the poll loop in place when it goes stale.
+   */
+  const startWatchdog = () => {
+    if (watchdog) clearInterval(watchdog);
+    const startedAt = Date.now();
+    watchdog = setInterval(async () => {
+      try {
+        if (!bot || !pollingStarted) return;
+        // Give the first poll cycle time to succeed before judging liveness.
+        if (Date.now() - startedAt < 120_000) return;
+        const lastUpdate = (bot as any)._polling?._lastUpdate ?? 0;
+        const ageMs = Date.now() - lastUpdate;
+        if (ageMs > 150_000) {
+          console.error(
+            `Telegram watchdog: poller stale (${Math.round(ageMs / 1000)}s with no getUpdates) — restarting polling.`
+          );
+          // stopPolling() without {cancel:true} aborts cleanly and does NOT
+          // reschedule the old loop, so there is no double-poll / 409 risk.
+          await bot.stopPolling();
+          bot.startPolling();
+        }
+      } catch (e) {
+        console.error("Telegram watchdog error:", e);
+      }
+    }, 60_000);
+    watchdog.unref?.();
+  };
 
   pi.on("session_shutdown", async () => {
+    if (watchdog) {
+      clearInterval(watchdog);
+      watchdog = null;
+    }
     if (bot) {
       await bot.stopPolling({ cancel: true });
       pollingStarted = false;
@@ -144,6 +185,7 @@ export default function (pi: ExtensionAPI) {
 
       bot.startPolling();
       pollingStarted = true;
+      startWatchdog();
 
       bot.on("message", async (msg) => {
         if (!isAllowedTelegramMessage(msg)) return;
