@@ -1,77 +1,61 @@
-# Pi Telegram Extension
+# Pi Telegram extension
 
-A Pi extension that enables two-way communication between Pi (the coding agent) and Telegram users.
+A [Pi](https://github.com/earendil-works/pi) extension that connects a Telegram bot to the coding agent. [trout-pi-agent](../trout-pi-agent) loads `dist/index.js` from this directory (`PI_TELEGRAM_EXTENSION_ROOT`, default `../pi-telegram-extension`).
 
-## Quick Start
+No bot token, chat id, or machine path is stored in this repository. Configuration is environment variables.
+
+## Setup
+
+Requires Node.js 22.19 or newer.
 
 ```bash
-# Install dependencies
 npm install
-
-# Build
 npm run build
-
-# Install to Pi
-mkdir -p ~/.pi/agent/extensions
-cp -r . ~/.pi/agent/extensions/pi-telegram-extension
-
-# Restart Pi
 ```
 
-## Configuration (environment variables)
-
-Set these in the same environment that launches Pi (e.g. your shell profile, systemd unit, or wrapper script).
+Set the variables in the environment that starts Pi (for trout-pi-agent, that is its `.env`). Copy [`.env.example`](.env.example).
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Yes | — | Bot token from [@BotFather](https://t.me/BotFather). |
-| `TELEGRAM_ALLOWLIST_ENABLED` | No | `true` (on) | Set to `false`, `0`, `no`, or `off` to disable the user allowlist and allow anyone to use the bot (legacy behavior). |
-| `TELEGRAM_ALLOWED_USER_IDS` | When allowlist on | — | Comma-separated numeric Telegram user IDs that may DM the bot and receive replies. Ignored when the allowlist is disabled. |
-| `TELEGRAM_ALLOWED_GROUP_CHAT_IDS` | When allowlist on | — | Comma-separated numeric Telegram **chat** IDs for groups/supergroups where anyone may message the bot and receive replies. Use the negative ID Telegram reports for the group (e.g. `-5017058965`). Ignored when the allowlist is disabled. |
+| `TELEGRAM_BOT_TOKEN` | Yes | — | Token from [@BotFather](https://t.me/BotFather). |
+| `TELEGRAM_ALLOWLIST_ENABLED` | No | `true` | Set to `false`, `0`, `no`, or `off` to accept messages from any Telegram user. |
+| `TELEGRAM_ALLOWED_USER_IDS` | When the allowlist is on | — | Comma-separated numeric user ids. |
+| `TELEGRAM_ALLOWED_GROUP_CHAT_IDS` | No | — | Comma-separated group chat ids. Group ids are negative, for example `-1001234567890`. |
+| `TELEGRAM_DOWNLOAD_DIR` | No | OS temp dir `/pi-telegram` | Directory for photos, documents, audio, and voice files. |
+| `TELEGRAM_TRANSCRIBE_COMMAND` | No | unset | Optional command that transcribes a voice message or video note. The media path is appended as the last argument. stdout is the transcript. |
 
-With the allowlist **enabled** (default), only listed users (in DMs or any chat) or anyone in an allowlisted group can trigger `/newsession`, `/stop`, and normal messages. Outbound sends (`telegram_send` and auto-reply) are allowed to allowlisted group chat IDs, and to other `chat_id` values the bot has already seen from an allowlisted user (e.g. that user’s DM or a group after they used a command).
+With the allowlist on, only listed users and listed group chats can talk to the bot. Outbound `telegram_send` and the automatic reply are limited to those group chats and to chats an allowlisted user has already used. With the allowlist off, any chat id can be targeted.
 
-With the allowlist **disabled**, behavior matches the previous open setup: any Telegram user can interact with the bot, and `telegram_send` may target any chat ID.
+Do not commit a real `.env`. It is gitignored.
 
-## Documentation
+## What the bot does
 
-- [Setup Guide](dev-docs/SETUP.md) - Step-by-step installation
-- [Architecture](dev-docs/README.md) - Design decisions and API usage
-- [Lessons Learned](dev-docs/LESSONS_LEARNED.md) - Key insights from development
-- [Gotchas](dev-docs/GOTCHAS.md) - Common issues and troubleshooting
-- [Development Log](dev-docs/DEV_LOG.md) - Chronological development history
+1. Someone messages the bot.
+2. The extension forwards the text to Pi with `sendUserMessage`.
+3. When the turn ends, the last assistant text is sent back to that chat.
+4. If the turn already called `telegram_send` or `telegram_send_photo`, the automatic reply is skipped.
 
-## How It Works
+Photos, documents, video, and audio are downloaded and the local path is included in the prompt. Voice messages and video notes are downloaded too. They are transcribed only when `TELEGRAM_TRANSCRIBE_COMMAND` is set. The command receives the file as its last argument (`.ogg` for voice, `.mp4` for a video note) and prints the transcript on stdout.
 
-1. Telegram user sends message to @trout_pi_bot
-2. Extension receives message and forwards to Pi via `sendUserMessage()`
-3. Pi generates a response
-4. Extension captures response via `agent_end` event
-5. Extension automatically sends response back to Telegram
+One chat is tracked at a time. A newer Telegram message replaces the chat that receives the automatic reply.
 
-## Telegram Bot Commands
+A polling conflict (Telegram 409, another client calling `getUpdates` for the same bot) stops polling and leaves the agent process running.
 
-The extension supports the following slash commands:
+## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/newsession` | Create a new Pi session (clears context via extension command) |
-| `/stop` | Stop current Pi execution immediately |
+| Telegram command | Effect |
+|------------------|--------|
+| `/newsession` | Starts a new Pi session. |
+| `/stop` | Aborts the current turn. |
 
-### `/newsession`
+Pi commands in the same process: `/telegram_chats`, `/telegram_stop`, `/newsession`.
 
-Dispatches the extension-registered Pi command `/newsession` (which calls `ctx.newSession()` after `ctx.waitForIdle()`). It is not forwarded as normal user text to the model.
+## Tools
 
-**Usage:** Send `/newsession` in Telegram.
-
-**Response:** "🔄 Creating new session..."
-
-### /stop Command
-Immediately aborts any ongoing Pi execution. Use this when Pi goes off the rails or gets stuck in a loop.
-
-**Usage:** Send `/stop` in Telegram
-
-**Response:** "🛑 Stopping current execution..."
+| Tool | Purpose |
+|------|---------|
+| `telegram_send` | Send text, or an image when `imagePath` is set. |
+| `telegram_send_photo` | Send a local image file. |
 
 ## License
 

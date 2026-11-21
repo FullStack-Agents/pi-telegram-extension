@@ -1,8 +1,13 @@
 {
   "name": "pi-telegram-extension",
   "version": "1.0.0",
-  "description": "Telegram integration for Pi coding agent",
+  "description": "Telegram bridge for the Pi coding agent. Loaded by trout-pi-agent from dist/index.js.",
   "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -10,16 +15,14 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.1",
-    "@sinclair/typebox": "^0.34.0",
-    "@types/fs-extra": "^11.0.4",
-    "fs-extra": "^11.3.4",
-    "node-telegram-bot-api": "^0.66.0"
+    "@earendil-works/pi-coding-agent": "1.6.0",
+    "@sinclair/typebox": "0.34.52",
+    "node-telegram-bot-api": "0.67.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/node-telegram-bot-api": "^0.64.0",
-    "typescript": "^5.0.0"
+    "@types/node": "22.20.5",
+    "@types/node-telegram-bot-api": "0.64.15",
+    "typescript": "7.0.2"
   },
   "pi": {
     "extensions": [
